@@ -484,9 +484,7 @@ runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Lisp>>> ") . eva
 
 
 -------------------------------- REPL --------------------------------
--- (define my-count (counter 111))
---(define (counter inc) (lambda (x) (set! inc (+ x inc)) inc))
--- (my-count 1)
+
 main = do 
 		args <- getArgs
 		if null args 

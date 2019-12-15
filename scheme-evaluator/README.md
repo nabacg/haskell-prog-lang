@@ -1,7 +1,7 @@
-hSchemeParser
+scheme-evaluator
 =============
 
-Toy Scheme REPL implemented in Haskell
+Toy Scheme evaluator with REPL implemented in Haskell using Parsec
 
 ### Installation
 
