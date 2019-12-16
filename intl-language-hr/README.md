@@ -1,7 +1,7 @@
 IntLang Interpreter
 =============
 
-Interpreter for Intuitive Language, a challange on HR. 
+Interpreter and a REPL for Intuitive Language, a challange on HR. 
 
 ## Intuitive Language description 
 
@@ -67,4 +67,36 @@ $ ./src/run test-scripts/test5.intl
 28/27
 1/1000000, 10100, -10100
 3/4, 0
+```
+
+
+### REPL session
+```bash
+$ ./run
+```
+
+``` 
+
+
+IntLang>>A is 15.
+
+IntLang>>What is A?
+15
+IntLang>>Sum is function of 2: 1, 1, 0.
+15
+IntLang>>What is Sum[1]?
+1, 1
+IntLang>>Inc is function of 1: 1, 1.
+1, 1
+IntLang>>I is 1.
+1, 1
+IntLang>>F1 is 1.
+1, 1
+IntLang>>do {10} assign I*F1 to F1 AND Inc[I] to I!
+1, 1
+IntLang>>what is I AND F1?
+3628800
+IntLang>>what is Sum[1]?
+1, 1
+IntLang>> 
 ```

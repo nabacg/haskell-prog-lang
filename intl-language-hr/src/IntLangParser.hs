@@ -1,4 +1,4 @@
-module IntLangParser (main, loadFile, parseString, topLevelEval, initState) where
+module IntLangParser (main, loadFile, parseString, topLevelEval, initState, replEval, IState) where
 
 import System.IO
 import Control.Monad
@@ -305,6 +305,12 @@ putMultipleLines (l:ls) = do
   putMultipleLines ls
 
 
+replEval :: IState -> IStmt -> IState
+replEval state@(env, stdOut) stmt = do
+   case evalStmt state stmt of
+     Right state'@(env, stdOut) ->  state'
+     Left e                ->  (env, ["Error: " ++ e])
+
 topLevelEval :: IState -> IStmt -> IO ()
 topLevelEval state stmt = do
    case evalStmt state stmt of
@@ -319,6 +325,14 @@ main :: IO ()
 main = parseString <$> getContents >>= (topLevelEval initState)
 
 
-
+-- λ> parseString "A is 15."
+-- VarDef "A" 15
+-- λ> replEval initState ( parseString "A is 15.")
+-- (fromList [("A",15)],[])
+-- λ> state' = replEval initState ( parseString "A is 15.")
+-- λ> state'
+-- (fromList [("A",15)],[])
+-- λ> replEval state' (parseString "What is A?")
+-- (fromList [("A",15)],["15"])
 
 -- "A is 15.\n Sum is function of 2: 1, 1, 0.\n Inc is function of 1: 1, 1. I is 1.\n F1 is 1.\n do {10} assign I*F1 to F1 AND Inc[I] to I!\n what is I AND F1?\n what is Sum[1]?"
