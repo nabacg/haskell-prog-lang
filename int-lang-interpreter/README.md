@@ -3,7 +3,7 @@ IntLang Interpreter
 
 Interpreter and a REPL for Intuitive Language, a challange on HR. 
 
-## Intuitive Language description 
+# Intuitive Language  
 
 Sometimes it is hard to read code written in the language you are not familiar with, not unless its written in Intuitive Language. Here's the sample of a program.
 
@@ -35,31 +35,30 @@ Language allows:
 
 Above program is inluded in this repository and can be found in [test scripts](test-scripts/test.intl).
 
-### Installation
+## Installation
 
+### Requirements
+You need to have [Haskell Stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/) installed. 
+
+### Build 
 ```bash
-cabal install mtl
-cabal install parsec
+$ cd int-lang-interpreter
+$ stack build
 ```
 
 
 
  ## Run 
 
-Compile into executable with GHC
-```bash
-ghc src/repl.hs -o run.o
-```
-
-Then you can run one of the test-scripts included.
+Once the project is built you can run one of the test-scripts included.
 
 ``` 
-$./src/run test-scripts/test.intl
+$stack exec int-lang-interpreter-exe test-scripts/test.intl
 11
 3628800
 1, 1
 
-$ ./src/run test-scripts/test5.intl
+$ stack exec int-lang-interpreter-exe test-scripts/test5.intl
 1/3, 0
 -3, -1, -2
 2
@@ -71,13 +70,8 @@ $ ./src/run test-scripts/test5.intl
 
 
 ### REPL session
-```bash
-$ ./run
 ```
-
-``` 
-
-
+$ stack exec int-lang-interpreter-exe
 IntLang>>A is 15.
 
 IntLang>>What is A?

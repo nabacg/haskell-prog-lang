@@ -1,4 +1,4 @@
-module Main where
+module Repl where
 
 import System.IO
 import System.Environment
@@ -23,7 +23,7 @@ runRepl :: IO ()
 runRepl = until_ (== "quit") (readPrompt "IntLang>>") Eval.replEval Eval.initState
 
 
-main :: IO()
+main :: IO ()
 main = do
   args <- getArgs
   if null args
