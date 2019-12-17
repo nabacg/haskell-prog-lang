@@ -1,4 +1,7 @@
- {-# LANGUAGE ExistentialQuantification #-} 
+{-# LANGUAGE ExistentialQuantification #-} 
+
+module SchemeEvaluator (main) where
+
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
 import Control.Monad
@@ -484,7 +487,7 @@ runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Lisp>>> ") . eva
 
 
 -------------------------------- REPL --------------------------------
-
+main :: IO ()
 main = do 
 		args <- getArgs
 		if null args 

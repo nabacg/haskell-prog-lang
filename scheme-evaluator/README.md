@@ -1,29 +1,24 @@
-scheme-evaluator
+#scheme-evaluator
 =============
 
 Toy Scheme evaluator with REPL implemented in Haskell using Parsec
 
-### Installation
+## Installation
 
+### Requirements
+You need to have [Haskell Stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/) installed. 
+
+### Build 
 ```bash
-cabal install mtl
-cabal install parsec
+$ cd scheme-evaluator
+$ stack build
 ```
 
-
-
- ## Run 
-
-Compile into executable with GHC
-```bash
-ghc src/schemeParser.hs -o schemeRepl.o
-```
-
-Then run 
+## Run 
 
 ```scheme 
 
-scheme-evaluator cab$ ./schemeRepl.o
+$ stack exec scheme-evaluator-exe
 Lisp>>> (+ 2 2)
 4
 Lisp>>> '(1 2 3 4)
