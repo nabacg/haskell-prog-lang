@@ -11,7 +11,6 @@ flushStr str = putStr str >> hFlush stdout
 readPrompt :: String -> IO String
 readPrompt prompt = flushStr prompt >> getLine
 
-
 until_ :: Monad m => (a -> Bool) -> m a  ->  (s -> a  -> m s) -> s -> m ()
 until_ pred prompt action state = do
     result <- prompt

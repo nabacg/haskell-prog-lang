@@ -94,3 +94,17 @@ IntLang>>what is Sum[1]?
 1, 1
 IntLang>> 
 ```
+
+
+## Tests
+
+Run tests using stack test
+
+```
+$stack test 
+int-lang-interpreter> test (suite: int-lang-interpreter-test)
+
+Cases: 2  Tried: 2  Errors: 0  Failures: 0
+
+int-lang-interpreter> Test suite int-lang-interpreter-test passed
+```

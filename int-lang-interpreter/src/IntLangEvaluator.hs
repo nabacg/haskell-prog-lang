@@ -1,4 +1,4 @@
-module IntLangEvaluator (main, loadFile, initState, replEval) where
+module IntLangEvaluator (main, loadFile, initState, replEval, eval, IExpr(..)) where
 
 import System.IO
 import Control.Monad
@@ -14,7 +14,7 @@ import qualified Text.ParserCombinators.Parsec.Token as Token
 import qualified Data.Map as Map
 
 
-data IOp = Plus | Minus | Multiply | Divide | DivNeg deriving (Show)
+data IOp = Plus | Minus | Multiply | Divide | DivNeg deriving (Show, Eq)
 
 data IExpr = OpExpr IOp IExpr IExpr
           | FunApp String [IExpr]
@@ -22,6 +22,7 @@ data IExpr = OpExpr IOp IExpr IExpr
           | VarRef String
           | Num Integer
           | Rat Rational
+          deriving (Eq)
 
 
 data IStmt = FunDef String [IExpr]
@@ -304,11 +305,17 @@ putMultipleLines (l:ls) = do
   putStrLn l
   putMultipleLines ls
 
-replEval :: IState -> String -> IO IState
-replEval state input = do
+printStdOut :: IState -> IO IState
+printStdOut (env, stdOut) = putMultipleLines stdOut >> return (env, [])
+
+eval :: IState -> String -> IState
+eval state@(env, _) input =
   case evalStmt state $ parseString input  of
-    Right (env, stdOut) -> putMultipleLines stdOut >> return (env, [])
-    Left e              -> putMultipleLines ["Error: " ++ e] >> return state
+    Right state' -> state'
+    Left e       -> (env, ["Error: " ++ e])
+
+replEval :: IState -> String -> IO IState
+replEval state input = printStdOut $ eval state input
 
 topLevelEval :: IState -> IStmt -> IO ()
 topLevelEval state stmt = do
@@ -316,10 +323,8 @@ topLevelEval state stmt = do
      Right (_, stdOut) -> putMultipleLines (reverse stdOut)
      Left e            -> putStrLn ("Error:" ++ e)
 
-loadFile :: String -> IO()
-loadFile path = parseString <$> readFile path >>= (topLevelEval initState)
+loadFile :: String -> IO ()
+loadFile path = readFile path >>= replEval initState >>= printStdOut >> return () 
 
 main :: IO ()
-main = parseString <$> getContents >>= (topLevelEval initState)
-
-
+main = getContents >>= replEval initState >>= printStdOut >> return ()

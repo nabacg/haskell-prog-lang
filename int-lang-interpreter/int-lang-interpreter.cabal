@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7daf704e349f55f3c0dc88e2eb3bb4327a6f9810784c4f27ef5089bc83b9b0af
+-- hash: 0f552d918e06d45e3beddec93833781051c28bb14acded01be23161440b6c278
 
 name:           int-lang-interpreter
 version:        0.1.0.0
@@ -59,12 +59,14 @@ test-suite int-lang-interpreter-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      IntLangEvaluatorTests
       Paths_int_lang_interpreter
   hs-source-dirs:
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      HUnit
+    , base >=4.7 && <5
     , containers
     , int-lang-interpreter
     , mtl
