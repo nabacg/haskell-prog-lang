@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d9e179b7e1fa466b6f61dd776daaede19310d56ad1bb1929e8721b97c2903922
+-- hash: 7daf704e349f55f3c0dc88e2eb3bb4327a6f9810784c4f27ef5089bc83b9b0af
 
 name:           int-lang-interpreter
 version:        0.1.0.0
@@ -27,7 +27,7 @@ source-repository head
 
 library
   exposed-modules:
-      IntLangParser
+      IntLangEvaluator
       Repl
   other-modules:
       Paths_int_lang_interpreter

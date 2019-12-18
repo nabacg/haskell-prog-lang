@@ -1,4 +1,4 @@
-IntLang Interpreter
+#Intuitive Lang Interpreter
 =============
 
 Interpreter and a REPL for Intuitive Language, a challange on HR. 

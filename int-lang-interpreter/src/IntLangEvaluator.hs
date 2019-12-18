@@ -1,4 +1,4 @@
-module IntLangParser (main, loadFile, initState, replEval) where
+module IntLangEvaluator (main, loadFile, initState, replEval) where
 
 import System.IO
 import Control.Monad
@@ -306,10 +306,9 @@ putMultipleLines (l:ls) = do
 
 replEval :: IState -> String -> IO IState
 replEval state input = do
-  let stmt = parseString input 
-  case evalStmt state stmt of
+  case evalStmt state $ parseString input  of
     Right (env, stdOut) -> putMultipleLines stdOut >> return (env, [])
-    Left e                   -> putMultipleLines ["Error: " ++ e] >> return state
+    Left e              -> putMultipleLines ["Error: " ++ e] >> return state
 
 topLevelEval :: IState -> IStmt -> IO ()
 topLevelEval state stmt = do

@@ -2,7 +2,7 @@ module Repl where
 
 import System.IO
 import System.Environment
-import qualified IntLangParser as Eval (main, loadFile, initState, replEval)
+import qualified IntLangEvaluator as Eval (main, loadFile, initState, replEval)
 
 -------------------------------- REPL --------------------------------
 flushStr :: String -> IO ()
