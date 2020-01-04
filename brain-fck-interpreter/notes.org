@@ -1,0 +1,2 @@
+* Clojure version
+** sample solution https://github.com/denis631/-Hackerrank-BrainF__k-interpreter/blob/master/src/brainfuck_interpreter/core.clj
