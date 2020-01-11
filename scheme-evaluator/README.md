@@ -14,6 +14,11 @@ $ cd scheme-evaluator
 $ stack build
 ```
 
+To also expose types for tooling like VS Code Haskero plugin, run following. 
+```bash 
+stack build intero --copy-compiler-tool
+```
+
 ## Run 
 
 ```scheme 
