@@ -1,5 +1,21 @@
 # brain-fck-interpreter
 
+## Installation 
+### Requirements 
+You need to have [Haskell Stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/) installed.
+
+### Build 
+```bash
+$ cd scheme-evaluator
+$ stack build
+```
+
+To also expose type information for tooling like VS Code Haskero plugin, run following.
+```bash
+stack build intero --copy-compiler-tool
+```
+
+
 ### REPL session 
 ```haskell
 λ> loadFile "test-cases/test1.bfc"

@@ -16,7 +16,6 @@ data BfCmd = IncPtrCmd
         | ReadByte
         | LoopCmd [BfCmd] deriving (Show, Eq)
 
---  https://stackoverflow.com/a/44234837
 singleBfCmdParser :: Parser BfCmd
 singleBfCmdParser =  const IncPtrCmd <$> char '>'
            <|> const DecPtrCmd <$> char '<'
