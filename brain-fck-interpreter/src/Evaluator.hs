@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module BFEvaluatorMTL (main, loadFile, run, topLevelParse, BfCmd(..)) where
+module Evaluator (main, loadFile, run, topLevelParse, BfCmd(..)) where
 
 import System.IO
 import Control.Monad.Reader
@@ -134,4 +134,5 @@ run (program, stdIn) = topLevelEval (liftParse $ topLevelParse program) (stdIn, 
 loadFile :: String -> IO String
 loadFile path =  processContents <$> readFile path >>= run
 
-main = processContents <$> getContents >>= run
+main :: IO ()
+main = processContents <$> getContents >>= run >>= putStrLn
