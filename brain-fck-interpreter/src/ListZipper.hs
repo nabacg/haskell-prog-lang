@@ -47,7 +47,3 @@ incCurr (ListZipper ls c rs) = ListZipper ls ((c+1) `mod` 256) rs
 
 decCurr :: ListZipper Int -> ListZipper Int
 decCurr (ListZipper ls c rs) = ListZipper ls ((c-1) `mod` 256) rs
-
-
--- Tests
--- zl == moveLeft $moveLeft $ moveRight $ moveRight zl

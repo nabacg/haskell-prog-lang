@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module BFEvaluator (main,  topLevelParse, BfCmd(..)) where
+module BFEvaluatorMTL (main, loadFile, run, topLevelParse, BfCmd(..)) where
 
 import System.IO
 import Control.Monad.Reader
@@ -50,82 +50,88 @@ topLevelParse programString = parse topLevelParser "" $ stripNonCmds programStri
 stripNonCmds = filter (`elem` "+-<>[],.")
 
 
---type EState = (Env, Int, [Char], [(Int, Char)])
-
---type EnvState = (Env, Int)
-
-
---newtype EvalStateOld a = EvalState { runES :: (WriterT StdOut (StateT EnvState IO)) a -- Move Int to separate State ?
---                               } deriving (Applicative, Functor, Monad, MonadIO, MonadWriter StdOut, MonadState EnvState)
-
 type Env = ListZipper Int
 type StdOut   = [(Char, Int)]
-data BfError = ReadOnEmptyInputStream Int | BfParseError String
+data BfError = ReadOnEmptyInputStream Int | BfParseError String | CounterRunOut Int
 
 type EvalState = (String, Int)
-type BfEval =  WriterT StdOut (Control.Monad.State.StateT EvalState (ExceptT BfError IO))
+type BfEval =   StateT EvalState  (ExceptT BfError (WriterT StdOut IO))
 
 
+opsCounterStep :: BfEval ()
+opsCounterStep = do
+  (s, cnt) <- get
+  put (s, cnt-1)
+  if cnt < 1
+    then throwError $ CounterRunOut cnt
+    else return ()
 
------------------- To Do  -----------------------------------------------
--- ToDo decCounter works, but what we really need is something that wraps every eval' call and between calls
--- - bumps the counter
--- - performs the check if cnt < 0  then finish
 
-decCounter :: a -> BfEval a
-decCounter a = get >>= \(s, cnt) -> put (s, cnt-1) >> return a
+readStdIn ::  BfEval Char
+readStdIn = do
+  (stdIn, c) <- get
+  case stdIn of
+    []        -> throwError $ ReadOnEmptyInputStream c
+    (ch:chs)  -> put (chs, c) >> return ch
+
 
 
 
 eval' :: Env -> BfCmd -> BfEval Env
-eval' env (IncPtrCmd) = return $ moveRight env
-eval' env (DecPtrCmd) = return $ moveLeft env
-eval' env (IncCurrByteCmd) = return $ incCurr env
+eval' env (IncPtrCmd)       = return $ moveRight env
+eval' env (DecPtrCmd)       = return $ moveLeft env
+eval' env (IncCurrByteCmd)  = return $ incCurr env
 eval' env (DecCurrByteCmd)  = return $ decCurr env
-eval' env (ReadByte)   = do
-  (stdIn, c) <- get  -- helper method, like monadic stack pop
-  case stdIn of
-    []   -> throwError $ ReadOnEmptyInputStream c
-    ch:_ -> do   put (stdIn, c)
-                 return $ setCurr (ord ch) env
-eval' env (PrintByte)  =    get >>= \(_, c) -> tell [(chr $ getCurr env, c)] >> return env
-eval' env (LoopCmd cmds) = if getCurr env == 0
-                           then return env
-                           else  evalLines env cmds >>= flip eval' (LoopCmd cmds)
-                           --else  evalLines env cmds >>= flip evalLines cmds
- -- Fascinatingly but the line above makes Helloworld return "\STX\254\ENQ\ENQ\b\NUL\255\b\v\ENQ\253\SOH\STX"
+eval' env (ReadByte)        = readStdIn >>= \ch -> return $ setCurr (ord ch) env
+eval' env (PrintByte)       = get >>= \(_, c) -> tell [(chr $ getCurr env, c)] >> return env
+eval' env lp@(LoopCmd cmds)    = if getCurr env == 0
+                              then return env
+                              else evalCmds env cmds  >>= \env'->
+                                                            if getCurr env' == 0
+                                                            then return env'
+                                                            else evalStep env' lp
 
 
-evalLines :: Env -> [BfCmd] -> BfEval Env
-evalLines env cmds = foldM (\e c ->  decCounter e >>  eval' e c ) env cmds
---evalLines env cmds = foldM (decCounter >>  eval' e ) env cmds
+
+evalStep ::  Env -> BfCmd -> BfEval Env
+evalStep env (LoopCmd cmds) = opsCounterStep >> eval' env (LoopCmd cmds) >>= \env' -> opsCounterStep >> return env'
+evalStep env cmd            = opsCounterStep >> eval' env cmd
+
+evalCmds :: Env -> [BfCmd] -> BfEval Env
+evalCmds env cmds = foldM evalStep env cmds
+
 
 liftParse :: Either ParseError [BfCmd]  -> BfEval Env
 liftParse (Left err)   = throwError $ BfParseError $ show  err
-liftParse (Right cmds) = evalLines (zipperOf 0) cmds
+liftParse (Right cmds) = evalCmds (zipperOf 0) cmds
 
-extractResult :: Either BfError ((Env, StdOut), EvalState) -> String
-extractResult evalRes = case evalRes of
-  Left (ReadOnEmptyInputStream cnt) ->  "Failed on trying to Read at cnt=" ++ show cnt
-  Left (BfParseError errMsg)        -> errMsg
-  Right ((env, stdOut), _)          -> map fst stdOut
-  --Right ((env, stdOut), _)          ->  intercalate "" $ map show stdOut -- this prints Cnts:
+extractStdOut :: StdOut -> String
+extractStdOut  =  map fst . takeWhile (\(_, cnt) -> cnt >= 0)
 
-topLevelEval :: BfEval Env  -> EvalState -> IO String --((Env, StdOut), EvalState)
-topLevelEval bfEval initState =  fmap extractResult $ runExceptT $ (runStateT (runWriterT bfEval)  initState)
+extractResult ::  (Either BfError (Env, EvalState), StdOut) -> String
+extractResult (evalRes, stdOut) = case evalRes of
+  Left (ReadOnEmptyInputStream cnt)  ->  "Failed on trying to Read from StdIn at Operation Count ="
+  Left (BfParseError errMsg)         -> errMsg
+  Left (CounterRunOut cnt)           -> extractStdOut stdOut ++ "\nPROCESS TIME OUT. KILLED!!!"
+  Right (env, (stdIn, cnt))          -> extractStdOut stdOut
 
 
+topLevelEval :: BfEval Env  -> EvalState -> IO String
+topLevelEval bfEval initState =  fmap extractResult $ runWriterT $ runExceptT (runStateT  bfEval initState)
 
--- topLevelEval (liftParse $ topLevelParse "+++.") ("AA", 10000)
--- topLevelEval (liftParse $ topLevelParse ",++++++++.") ("AAAAA", 100000)
--- "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
--- topLevelEval (liftParse $ topLevelParse "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.") ("AAAAA", 10000)
--- does return "Hello World!\n" !!!!!!!!!!!!!
 
--- Error handling also works
---  topLevelEval (parseAndEval $ topLevelParse ",++++++++.") ("", 10)
--- "Failed on trying to Read at cnt=9"
+processContents :: String -> (String, String)
+processContents inputContents = (programString, stdIn)
+  where
+    contents = lines inputContents
+    (m:n:[]) =  map read $ (words . head) contents :: [Int]
+    stdIn = take m  $ (head . drop 1) contents
+    programString = intercalate "" $ (take n . drop 2) contents
 
--- topLevelEval (parseAndEval $ topLevelParse ",++++++[++.") ("", 10)
--- "(line 1, column 12):\nunexpected end of input\nexpecting \">\", \"<\", \"+\", \"-\", \".\", \",\", \"[\" or \"]\""
-main = putStrLn "HW"
+run :: (String, String)  -> IO String
+run (program, stdIn) = topLevelEval (liftParse $ topLevelParse program) (stdIn, 100000) -- 100248
+
+loadFile :: String -> IO String
+loadFile path =  processContents <$> readFile path >>= run
+
+main = processContents <$> getContents >>= run

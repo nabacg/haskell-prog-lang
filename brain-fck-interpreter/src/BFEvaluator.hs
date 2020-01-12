@@ -59,7 +59,7 @@ eval (env, c, [], _)         (ReadByte)       = (env, c, [], [(c, 'E')]) -- ToDo
 eval (env, c, stdIn, stdOut) (LoopCmd cmds) = if getCurr env == 0 -- [ open loop
                                                 then (env, c-2, stdIn, stdOut) -- ] close loop, dec counter by for each '[' and  ']' operation
                                                 else
-                                                  if getCurr env' == 0 || c'-1 < 0 -- ]  close loop test, counter is dec'ed in s'
+                                                  if getCurr env' == 0 --   close loop test, counter is dec'ed in s'
                                                   then s'
                                                   else eval s' (LoopCmd cmds)
                                                   where
