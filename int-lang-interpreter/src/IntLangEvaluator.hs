@@ -1,7 +1,9 @@
-module IntLangEvaluator (main, loadFile, initState, replEval, eval, IExpr(..)) where
+module IntLangEvaluator (main, initEnv, loadFile, replEval, topLevelEval, IExpr(..)) where
 
 import System.IO
 import Control.Monad
+import Control.Monad.Except
+import Control.Monad.Writer
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
@@ -167,28 +169,40 @@ numOperators = [[Infix (reservedOp "/-" >> return (OpExpr DivNeg)) AssocLeft,
 
 
 parseFile :: String -> IO IStmt
-parseFile file =
-  do
+parseFile file = do
     program <- readFile file
     case parse intLangParser "" program of
       Left e  -> print e >> fail "parse error"
       Right r -> return r
 
 parseString :: String -> IStmt
-parseString str =
+parseString str = -- parse intLangParser "" str
   case parse intLangParser "" str of
     Left e  -> error $ show e
     Right r -> r
 
 -- Evaluator
 type Env = Map.Map String IExpr
+type StdOut = [String]
+
+type IState = (Env, StdOut)
+
+
+data IntLangError = EvalError IExpr String
+        | FunApplicationError String
+        | UnboundSymbolError String
+        | FailedArithOperator String
+        | LoopCounterError String
+        | IntParseError ParseError
+        deriving (Show)
+
+type InterpState = ExceptT IntLangError (WriterT StdOut IO)
+
 
 initEnv :: Env
 initEnv = Map.empty
 
 numOp :: IOp -> IExpr  -> IExpr -> IExpr
---numOp op   (Neg e1) (Neg e2)    = numOp op e1 e2
--- numOp op   (Neg e1) e1          = numOp op e1 e2
 numOp Plus (Num  a) (Num  b)    = Num $ a + b
 numOp Plus (Num  a) (Rat  b)    = Rat $ (fromIntegral a) + b
 numOp Plus (Rat  a) (Num  b)    = Rat $ a + (fromIntegral b)
@@ -210,12 +224,13 @@ numOp DivNeg (Rat  a) (Num b)   = Rat $ (-1)*a / (fromIntegral b)
 numOp DivNeg (Num  a) (Rat b)   = Rat $ (-1)*(fromIntegral  a) / b
 numOp DivNeg (Rat  a) (Rat b)   = Rat $ (-1)*a / b
 
-apply :: [IExpr] -> [IExpr] -> Rational -> Either String IExpr
-apply [] [] acc               = Right $ Rat acc
-apply [] args _               = Left "Too many arguments provided"
-apply ((Num p):[]) [] acc     = Right $ Rat (acc + (fromIntegral p))
-apply ((Rat p):[]) [] acc     = Right $ Rat (acc + p)
-apply params [] acc           = Right $ FunVal $ (init params ++ [lastParam])
+
+apply :: [IExpr] -> [IExpr] -> Rational -> InterpState IExpr
+apply [] [] acc               = return $ Rat acc
+apply [] args _               = throwError $ FunApplicationError "Too many arguments provided"
+apply ((Num p):[]) [] acc     = return $ Rat (acc + (fromIntegral p))
+apply ((Rat p):[]) [] acc     = return $ Rat (acc + p)
+apply params [] acc           = return $ FunVal $ (init params ++ [lastParam])
   where lastParam = Rat (acc + p)
         p = case last params of
                     Num n -> fromIntegral n
@@ -224,107 +239,79 @@ apply ((Num p):params) ((Num a):args) acc = apply params args (acc + (fromIntegr
 apply ((Rat p):params) ((Num a):args) acc = apply params args (acc + p * (fromIntegral a))
 apply ((Num p):params) ((Rat a):args) acc = apply params args (acc + (fromIntegral p) * a)
 apply ((Rat p):params) ((Rat a):args) acc = apply params args (acc + p * a)
-apply _ _ _ = Left "Failed trying to apply a function!"
+apply _ _ _ = throwError $ FunApplicationError "Failed trying to apply a function!"
 
-lookupVar :: Env -> String -> Either String IExpr
+
+lookupVar :: Env -> String -> InterpState IExpr
 lookupVar env s = case Map.lookup (map toUpper s) env of   -- lang is case insensitive so we keep symbols in UPPER case
-                     Just v -> Right v
-                     Nothing -> Left ( "Unresolved symbol " ++ s)
+                     Just v -> return v
+                     Nothing -> throwError $ UnboundSymbolError  ("Unresolved symbol " ++ s)
 
 extendEnv :: Env -> String -> IExpr -> Env
 extendEnv env sym val = Map.insert (map toUpper sym) val env
 
 
 
-evalExpr :: Env -> IExpr -> Either String IExpr
-evalExpr _   (Num n) = Right $ Num n
-evalExpr _   (Rat r) = Right $ Rat r
-evalExpr _   (FunVal n) = Right $ FunVal n
+evalExpr :: Env -> IExpr -> InterpState IExpr
+evalExpr _   (Num n) = return $ Num n
+evalExpr _   (Rat r) = return $ Rat r
+evalExpr _   (FunVal n) = return $ FunVal n
 evalExpr env (VarRef s) = lookupVar env s
-evalExpr env (OpExpr op a1 a2) = -- Num <$> ( ( numOpLookup op) <$> (evalExpr env  a1) <*> (evalExpr env a2))
-  case (evalExpr env a1, evalExpr env a2) of
-    (Right e1, Right e2)      -> Right $ (numOp op e1 e2)
-    _                         -> Left "Failed Operator evaluation" -- ToDo deconstruct both subresults and provide errors
-evalExpr env (FunApp funName args) = case (funDef, evaledArgs) of
-                                      (Right f, Right a) -> apply f a 0
-                                      (Left e1, Left e2) -> Left ("Two errors e1: " ++ e1 ++ " AND e2= " ++  e2)
-                                      (Left e, _)  -> Left e
-                                      (_, Left e)  -> Left e
+evalExpr env (OpExpr op a1 a2) = do
+                            e1 <- evalExpr env a1
+                            e2 <- evalExpr env a2
+                            return $ numOp op e1 e2
+evalExpr env (FunApp funName args) = do
+    (FunVal params) <- lookupVar env funName
+    evaledArgs <- forM args (\arg -> evalExpr env arg)
+    apply params evaledArgs 0  
 
-  where funDef = case (lookupVar env funName) of
-                   Right (FunVal params) -> Right params
-                   _ -> Left ("Cannot find function definition for " ++ funName)
-        evaledArgs = foldr (\ r (Right  acc) -> case r of
-                                         Right e -> Right (e: acc)
-                                         Left m  -> Left m) (Right  []) (map (evalExpr env) args)
+evalAndExtend ::  Env -> (String, IExpr) -> InterpState Env
+evalAndExtend env  (var, val) = evalExpr env val  >>= \v -> return $ extendEnv env var v
 
-type IState = (Env, [String])
+extractLoopCounter :: IExpr -> InterpState Integer
+extractLoopCounter (Num n) = return n
+extractLoopCounter (Rat r) | denominator r == 1 = return $ numerator r
+extractLoopCounter (Rat r) = throwError $ LoopCounterError ("Loop: Don't know how do fractional number of loop iterations! {n}= " ++ show r)
+extractLoopCounter n = throwError $ LoopCounterError ("Cannot execute Loop as expr inside {" ++ show n ++ "} is not a Number!")
 
-initState :: IState
-initState = (initEnv, [])
+evalStmt :: Env -> IStmt -> InterpState Env
+evalStmt env (Assign vals)       = foldM evalAndExtend env  vals
+evalStmt env (VarDef sym val)    = evalAndExtend env (sym, val)
+evalStmt env (FunDef sym params) = do
+                          evaledParams <- forM params (evalExpr env)
+                          return $ extendEnv env sym (FunVal evaledParams)
+evalStmt env (Loop n body)       = do
+                      cnt <- extractLoopCounter n
+                      foldM evalAndExtend env (concat $ replicate (fromIntegral cnt) body)
+evalStmt env (Values vs)         = forM_ vs (\v -> evalExpr env v >>= tell . (:[]) . show) >> return env
+evalStmt env (StmtSeq stmts)     = foldM evalStmt env stmts
 
-evalAndExtend :: Either String IState -> (String, IExpr) -> Either String IState
-evalAndExtend s  (var, val) = case s of   -- todo isnt there a nicer way to write this then nested case?
-                                Right (env, stdOut) -> case  evalExpr env val of
-                                                         Right v -> Right $ (extendEnv env var v, stdOut)
-                                                         Left m  -> Left m
-                                Left m -> Left m
+runIntLangApp :: InterpState e -> IO (Either IntLangError e, StdOut)
+runIntLangApp intApp = runWriterT (runExceptT  intApp)
 
+liftParse :: Either ParseError IStmt -> InterpState IStmt
+liftParse (Left err)   = throwError $ IntParseError err
+liftParse (Right stmt) = return stmt
 
-evalStmt :: IState -> IStmt -> Either String IState
-evalStmt (env, stdOut) (Assign vals) = foldl evalAndExtend (Right (env, stdOut)) vals
-evalStmt s (VarDef sym val) = evalAndExtend (Right s) (sym, val)
-evalStmt (env, stdOut) (FunDef sym params) =  Right (extendEnv env sym (FunVal evaledParams), stdOut)
-  where evaledParams = rights $ map (evalExpr env) params
-evalStmt (env, stdOut) (Loop n body) = case evalExpr env n of
-                                               Right (Num n') -> foldl evalAndExtend
-                                                                 (Right (env, stdOut))
-                                                                 (concat $ replicate (fromIntegral  n') body)
-                                               Right (Rat r)  -> if (denominator r) == 1
-                                                                 then   foldl evalAndExtend
-                                                                        (Right (env, stdOut))
-                                                                        (concat $ replicate (fromIntegral (numerator  r)) body)
-                                                                 else Left $ "Loop: Don't know how do fractional number of loop iterations! {n}= " ++ show r
-                                               _              -> Left ("Cannot execute Loop as expr inside {" ++
-                                                                       show n
-                                                                       ++ "} is not a Number!")
-evalStmt state (Values vs) =  foldl (\s e -> case s of
-                                               Right (env, stdOut) ->
-                                                 (\s -> (env, s:stdOut)) <$>  show  <$> evalExpr env e
-                                               l -> l) (Right state) vs
+eval :: Env -> String -> InterpState Env
+eval env input = (liftParse $ parse intLangParser "" input) >>= evalStmt env
 
-evalStmt state (StmtSeq [])        = Right state
-evalStmt state (StmtSeq (s:stmts)) = case evalStmt state s of
-                                       Right state' -> evalStmt state' (StmtSeq  stmts)
-                                       Left m       -> Left m
+extractStdOut :: (Either IntLangError e, StdOut) -> IO String
+extractStdOut (env, stdOut) = return $ intercalate "\n" stdOut
 
+replEval :: Env -> String -> IO Env
+replEval env input = do 
+  res@(intRes, _) <- runIntLangApp (eval env input)
+  case intRes of 
+    (Left err)    -> putStrLn  (show err) >> return env 
+    (Right env')  -> extractStdOut res >>= putStrLn >> return env'
 
-putMultipleLines :: [String] -> IO ()
-putMultipleLines [] = return ()
-putMultipleLines (l:ls) = do
-  putStrLn l
-  putMultipleLines ls
-
-printStdOut :: IState -> IO IState
-printStdOut (env, stdOut) = putMultipleLines stdOut >> return (env, [])
-
-eval :: IState -> String -> IState
-eval state@(env, _) input =
-  case evalStmt state $ parseString input  of
-    Right state' -> state'
-    Left e       -> (env, ["Error: " ++ e])
-
-replEval :: IState -> String -> IO IState
-replEval state input = printStdOut $ eval state input
-
-topLevelEval :: IState -> IStmt -> IO ()
-topLevelEval state stmt = do
-   case evalStmt state stmt of
-     Right (_, stdOut) -> putMultipleLines (reverse stdOut)
-     Left e            -> putStrLn ("Error:" ++ e)
+topLevelEval :: Env -> String -> IO String
+topLevelEval env input = runIntLangApp (eval env input) >>= extractStdOut
 
 loadFile :: String -> IO ()
-loadFile path = readFile path >>= replEval initState >>= printStdOut >> return () 
+loadFile path = readFile path >>= topLevelEval initEnv >>= putStrLn
 
 main :: IO ()
-main = getContents >>= replEval initState >>= printStdOut >> return ()
+main = getContents >>= topLevelEval initEnv  >>= putStrLn

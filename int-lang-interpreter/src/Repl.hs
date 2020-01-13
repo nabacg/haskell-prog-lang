@@ -2,7 +2,7 @@ module Repl where
 
 import System.IO
 import System.Environment
-import qualified IntLangEvaluator as Eval (main, loadFile, initState, replEval)
+import qualified IntLangEvaluator as Eval (main, initEnv, loadFile, replEval)
 
 -------------------------------- REPL --------------------------------
 flushStr :: String -> IO ()
@@ -19,7 +19,7 @@ until_ pred prompt action state = do
         else action state result >>= until_ pred prompt action
 
 runRepl :: IO ()
-runRepl = until_ (== "quit") (readPrompt "IntLang>>") Eval.replEval Eval.initState
+runRepl = until_ (== "quit") (readPrompt "IntLang>>") Eval.replEval Eval.initEnv
 
 
 main :: IO ()

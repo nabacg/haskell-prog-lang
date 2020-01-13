@@ -4,15 +4,18 @@ module IntLangEvaluatorTests (runTests) where
     import Data.Map
     import IntLangEvaluator
 
-    testVarDeclaration = TestCase $ assertEqual
-        "Env should contain f and x vars, with correct values"
-        (fromList [("A",Num 15)], [])
-        (eval initState "A is 15.")
+    testVarDeclaration = TestCase (do 
+        env <- replEval initEnv "A is 15."
+        (assertEqual "Env should contain f and x vars, with correct values" 
+            (fromList [("A",Num 15)]) 
+            env ))
 
-    testValReading = TestCase $ assertEqual
-        "Env should contain (A, 42) and StdOut should contain 42 line."
-        (fromList [("A",Num 42)],["42"])
-        (eval (fromList [("A",Num 42)],[]) "What is A?")
+    testValReading = TestCase (do 
+        res <- topLevelEval (fromList [("A",Num 42)]) "What is A?"
+        (assertEqual "Env should contain (A, 42) and StdOut should contain 42 line." 
+            "42" 
+            res))
+        
 
 
     testCases = TestList [testVarDeclaration, testValReading]
