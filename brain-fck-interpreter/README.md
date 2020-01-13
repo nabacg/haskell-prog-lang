@@ -1,4 +1,4 @@
-# brain-fck-interpreter
+# Brain-f__k Interpreter
 
 ## Installation 
 ### Requirements 
