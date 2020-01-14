@@ -31,6 +31,7 @@ data Stmt = AssignStmt String NumExpr
           | StmtSeq [Stmt]
           | IfStmt BoolExpr Stmt Stmt
           | WhileStmt BoolExpr Stmt
+          | EnvStmt
           deriving (Show)
 
 -- https://wiki.haskell.org/Parsing_a_simple_imperative_language
@@ -48,7 +49,8 @@ languageDef =
                                    , "true"
                                    , "false"
                                    , "and"
-                                   , "or"]
+                                   , "or"
+                                   , "ENV"]
            , Token.reservedOpNames = ["+", "-", "*", "/", ":=",
                                      "<", ">", "and", "or"]}
 
@@ -81,9 +83,13 @@ stmtSeq =  (\stmts -> case stmts of
 
 
 singleStatement :: Parser Stmt
-singleStatement = ifStmt
+singleStatement = envStmt
+                  <|> ifStmt
                   <|> whileStmt
                   <|> assignStmt
+
+envStmt :: Parser Stmt 
+envStmt = reserved "ENV" *> return EnvStmt
 
 ifStmt :: Parser Stmt
 ifStmt = do
@@ -193,6 +199,7 @@ evalStmt env stmt@(WhileStmt p s)  = do
                                      else return env
 evalStmt env (AssignStmt n exp)    = evalExpr env exp >>= \v -> return $ Map.insert n v env
 evalStmt env (StmtSeq ss)          = foldM evalStmt env ss
+evalStmt env (EnvStmt)             = return env
 
 
 -- parseFile :: String -> IO Stmt
@@ -233,7 +240,7 @@ replEval env input = do
   res <- runExceptT (eval env input)  
   case res of 
     Left err   -> (putStrLn $ show err) >> return env 
-    Right env' -> return env'
+    Right env' -> (printResult env') >> return env'
 
 topLevelEval :: Env -> String -> IO ()
 topLevelEval env input = do 

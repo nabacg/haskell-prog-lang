@@ -310,8 +310,8 @@ replEval env input = do
 topLevelEval :: Env -> String -> IO String
 topLevelEval env input = runIntLangApp (eval env input) >>= extractStdOut
 
-loadFile :: String -> IO ()
-loadFile path = readFile path >>= topLevelEval initEnv >>= putStrLn
+loadFile :: String -> IO String
+loadFile path = readFile path >>= topLevelEval initEnv 
 
-main :: IO ()
-main = getContents >>= topLevelEval initEnv  >>= putStrLn
+main :: IO String
+main = getContents >>= topLevelEval initEnv 
