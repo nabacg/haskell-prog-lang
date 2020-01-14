@@ -2,6 +2,7 @@ module WhileLangInterpreter (initEnv, eval, replEval, loadFile, main) where
 
 import System.IO
 import Control.Monad
+import Control.Monad.Except
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
@@ -145,11 +146,18 @@ relationOp = (reservedOp ">" >> return GreaterThen)
 
 
 type Env = Map.Map String Integer
+data WlError = WlParseError ParseError 
+              | UnboundVariableError String
+              deriving (Show)
+type WlLangState = ExceptT WlError IO
 
+initEnv :: Env
 initEnv = Map.empty
 
-lookupVar :: Env -> String -> Maybe Integer
-lookupVar env querySymbol = Map.lookup querySymbol env
+lookupVar :: Env -> String -> WlLangState Integer
+lookupVar env sym = case Map.lookup sym env of 
+    Just v -> return v 
+    Nothing -> throwError $ UnboundVariableError sym
 
 
 numOpLookup :: ArithOp -> (Integer -> Integer -> Integer)
@@ -158,47 +166,51 @@ numOpLookup Minus = (-)
 numOpLookup Div   = div
 numOpLookup Multp = (*)
 
-evalExpr :: Env -> NumExpr -> Maybe Integer
-evalExpr env (Num n) = Just n
+evalExpr :: Env -> NumExpr -> WlLangState Integer
+evalExpr env (Num n) = return n
 evalExpr env (Var s) = lookupVar env s
 evalExpr env (ArithExpr op a1 a2) = (numOpLookup op) <$> (evalExpr env a1) <*> (evalExpr env a2)
 
-evalBoolExpr :: Env -> BoolExpr -> Bool
-evalBoolExpr env (BoolLiteral b) = b
-evalBoolExpr env (BoolOpExpr AND a1 a2) = (evalBoolExpr env a1) && evalBoolExpr env a2
-evalBoolExpr env (BoolOpExpr OR a1 a2) = (evalBoolExpr env a1) || evalBoolExpr env a2
-evalBoolExpr env (RelOpExpr GreaterThen a1 a2) = fromMaybe False ((>) <$> (evalExpr env a1) <*> (evalExpr env a2))
-evalBoolExpr env (RelOpExpr LessThen a1 a2) = fromMaybe False ((<) <$> (evalExpr env a1) <*> (evalExpr env a2))
+evalBoolExpr :: Env -> BoolExpr -> WlLangState Bool
+evalBoolExpr env (BoolLiteral b) = return b
+evalBoolExpr env (BoolOpExpr AND a1 a2)        = (&&) <$> (evalBoolExpr env a1) <*> evalBoolExpr env a2
+evalBoolExpr env (BoolOpExpr OR a1 a2)         = (||) <$> (evalBoolExpr env a1) <*> evalBoolExpr env a2
+evalBoolExpr env (RelOpExpr GreaterThen a1 a2) = (>)  <$> (evalExpr env a1)     <*> (evalExpr env a2)
+evalBoolExpr env (RelOpExpr LessThen a1 a2)    = (<)  <$> (evalExpr env a1)     <*> (evalExpr env a2)
 
 
 
-evalStmt :: Env -> Stmt -> Env
-evalStmt env (IfStmt p s1 s2)      = if evalBoolExpr env p
+evalStmt :: Env -> Stmt -> WlLangState Env
+evalStmt env (IfStmt p s1 s2)      = do
+                                     boolCond <-  evalBoolExpr env p
+                                     if boolCond
                                      then evalStmt env s1
                                      else evalStmt env s2
-evalStmt env stmt@(WhileStmt p s)  = if evalBoolExpr env p
-                                     then evalStmt (evalStmt env s) stmt
-                                     else env
-evalStmt env (AssignStmt n exp)    = case  evalExpr env exp of
-                                       Nothing -> env
-                                       Just v  -> Map.insert n v env
-evalStmt env (StmtSeq [])          = env
-evalStmt env (StmtSeq (s:ss))      = evalStmt (evalStmt env s) (StmtSeq ss)
+evalStmt env stmt@(WhileStmt p s)  = do 
+                                     boolCond <- evalBoolExpr env p
+                                     if boolCond
+                                     then (evalStmt env s) >>= \bodyExpr -> evalStmt bodyExpr stmt
+                                     else return env
+evalStmt env (AssignStmt n exp)    = evalExpr env exp >>= \v -> return $ Map.insert n v env
+evalStmt env (StmtSeq ss)          = foldM evalStmt env ss
 
 
-parseFile :: String -> IO Stmt
-parseFile file =
-  do
-    program <- readFile file
-    case parse wlParser "" program of
-      Left e  -> print e >> fail "parse error"
-      Right r -> return r
+-- parseFile :: String -> IO Stmt
+-- parseFile file =
+--   do
+--     program <- readFile file
+--     case parse wlParser "" program of
+--       Left e  -> print e >> fail "parse error"
+--       Right r -> return r
 
-parseString :: String -> Stmt
-parseString str =
-  case parse wlParser "" str of
-    Left e  -> error $ show e
-    Right r -> r
+liftParse :: Either ParseError Stmt -> WlLangState Stmt
+liftParse (Left err)   = throwError $ WlParseError err
+liftParse (Right stmt) = return stmt
+
+parseString :: String -> WlLangState Stmt
+parseString str = liftParse $ parse wlParser "" str
+
+
 
 putMultipleLines :: [String] -> IO ()
 putMultipleLines [] = return ()
@@ -210,14 +222,28 @@ printResult :: Env -> IO ()
 printResult env = putMultipleLines ((map (\(k, v) -> unwords [k, show v]) . Map.toAscList) env)
 
 
-eval :: Env -> String -> Env
-eval env input = evalStmt env $ parseString input
+eval :: Env -> String -> WlLangState Env
+eval env input = parseString input >>= evalStmt env 
+
+runWlLang :: WlLangState a -> IO (Either WlError a)
+runWlLang wlInt  = runExceptT wlInt
 
 replEval :: Env -> String  -> IO Env
-replEval env input = return $ eval env input
+replEval env input = do 
+  res <- runExceptT (eval env input)  
+  case res of 
+    Left err   -> (putStrLn $ show err) >> return env 
+    Right env' -> return env'
+
+topLevelEval :: Env -> String -> IO ()
+topLevelEval env input = do 
+    res <- runWlLang (eval initEnv input) 
+    case res of 
+      Left err   -> putStrLn $ show err
+      Right env' -> printResult env'
 
 loadFile :: String -> IO ()
-loadFile path = readFile path >>= replEval initEnv >>= printResult
+loadFile path = readFile path >>= topLevelEval initEnv
 
 main :: IO ()
-main = getContents >>= replEval initEnv >>= printResult
+main = getContents >>= topLevelEval initEnv

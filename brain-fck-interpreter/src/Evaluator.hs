@@ -84,7 +84,7 @@ eval' env (IncCurrByteCmd)  = return $ incCurr env
 eval' env (DecCurrByteCmd)  = return $ decCurr env
 eval' env (ReadByte)        = readStdIn >>= \ch -> return $ setCurr (ord ch) env
 eval' env (PrintByte)       = get >>= \(_, c) -> tell [(chr $ getCurr env, c)] >> return env
-eval' env lp@(LoopCmd cmds)    = if getCurr env == 0
+eval' env lp@(LoopCmd cmds) = if getCurr env == 0
                               then return env
                               else evalCmds env cmds  >>= \env'->
                                                             if getCurr env' == 0

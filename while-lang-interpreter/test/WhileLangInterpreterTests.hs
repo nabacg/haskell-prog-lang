@@ -4,10 +4,10 @@ import Test.HUnit
 import Data.Map
 import WhileLangInterpreter
 
-testEvalStmt = TestCase $ assertEqual 
-    "Env should contain f and x vars, with correct values"
-    (fromList [("f",33),("x",12)])
-    (eval initEnv "f := 42;x := 12; if x < 4 then f := 1 else f := 33")
+testEvalStmt = TestCase (do 
+    res <- replEval initEnv "f := 42;x := 12; if x < 4 then f := 1 else f := 33"
+
+    (assertEqual "Env should contain f and x vars, with correct values" (fromList [("f",33),("x",12)]) res )) 
 
 
 testCases = TestList [testEvalStmt]
