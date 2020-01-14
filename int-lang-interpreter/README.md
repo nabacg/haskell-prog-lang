@@ -1,7 +1,6 @@
-#Intuitive Lang Interpreter
-=============
+# Intuitive Lang Interpreter
 
-Interpreter and a REPL for Intuitive Language, a challange on HR. 
+Interpreter and a REPL for Intuitive Language, a challenge on HR. 
 
 # Intuitive Language  
 
@@ -46,6 +45,10 @@ $ cd int-lang-interpreter
 $ stack build
 ```
 
+To also expose type information for tooling like VS Code Haskero plugin, run following.
+```bash
+stack build intero --copy-compiler-tool
+```
 
 
  ## Run 

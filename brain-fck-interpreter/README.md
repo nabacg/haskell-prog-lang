@@ -1,4 +1,4 @@
-# brain-fck-interpreter
+# Brain-f__k Interpreter
 
 ## Installation 
 ### Requirements 
@@ -6,7 +6,7 @@ You need to have [Haskell Stack](https://docs.haskellstack.org/en/stable/install
 
 ### Build 
 ```bash
-$ cd scheme-evaluator
+$ cd brain-fck-interpreter/
 $ stack build
 ```
 
