@@ -28,4 +28,4 @@ main = do
     args <- getArgs
     if null args
     then runRepl
-    else Eval.loadFile $ head args
+    else Eval.loadFile (head args) >>= putStrLn

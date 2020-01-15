@@ -1,4 +1,4 @@
-module WhileLangInterpreter (initEnv, eval, replEval, loadFile, main) where
+module WhileLangInterpreter (initEnv, eval, replEval, topLevelEval, loadFile, main) where
 
 import System.IO
 import Control.Monad
@@ -8,6 +8,7 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Data.Maybe
+import Data.List(intercalate)
 import qualified Data.Map as Map
 
 data ArithOp = Plus | Minus | Multp | Div deriving (Show)
@@ -33,6 +34,13 @@ data Stmt = AssignStmt String NumExpr
           | WhileStmt BoolExpr Stmt
           | EnvStmt
           deriving (Show)
+
+type Env = Map.Map String Integer
+data WlError = WlParseError ParseError
+              | UnboundVariableError String
+              deriving (Show, Eq)
+type WlLangState = ExceptT WlError IO
+
 
 -- https://wiki.haskell.org/Parsing_a_simple_imperative_language
 languageDef =
@@ -88,7 +96,7 @@ singleStatement = envStmt
                   <|> whileStmt
                   <|> assignStmt
 
-envStmt :: Parser Stmt 
+envStmt :: Parser Stmt
 envStmt = reserved "ENV" *> return EnvStmt
 
 ifStmt :: Parser Stmt
@@ -151,18 +159,13 @@ relationOp = (reservedOp ">" >> return GreaterThen)
              <|> (reservedOp "<" >> return LessThen)
 
 
-type Env = Map.Map String Integer
-data WlError = WlParseError ParseError 
-              | UnboundVariableError String
-              deriving (Show)
-type WlLangState = ExceptT WlError IO
 
 initEnv :: Env
 initEnv = Map.empty
 
 lookupVar :: Env -> String -> WlLangState Integer
-lookupVar env sym = case Map.lookup sym env of 
-    Just v -> return v 
+lookupVar env sym = case Map.lookup sym env of
+    Just v -> return v
     Nothing -> throwError $ UnboundVariableError sym
 
 
@@ -192,7 +195,7 @@ evalStmt env (IfStmt p s1 s2)      = do
                                      if boolCond
                                      then evalStmt env s1
                                      else evalStmt env s2
-evalStmt env stmt@(WhileStmt p s)  = do 
+evalStmt env stmt@(WhileStmt p s)  = do
                                      boolCond <- evalBoolExpr env p
                                      if boolCond
                                      then (evalStmt env s) >>= \bodyExpr -> evalStmt bodyExpr stmt
@@ -202,14 +205,6 @@ evalStmt env (StmtSeq ss)          = foldM evalStmt env ss
 evalStmt env (EnvStmt)             = return env
 
 
--- parseFile :: String -> IO Stmt
--- parseFile file =
---   do
---     program <- readFile file
---     case parse wlParser "" program of
---       Left e  -> print e >> fail "parse error"
---       Right r -> return r
-
 liftParse :: Either ParseError Stmt -> WlLangState Stmt
 liftParse (Left err)   = throwError $ WlParseError err
 liftParse (Right stmt) = return stmt
@@ -217,40 +212,31 @@ liftParse (Right stmt) = return stmt
 parseString :: String -> WlLangState Stmt
 parseString str = liftParse $ parse wlParser "" str
 
+showEnv :: Env -> String
+showEnv = intercalate "\n" . map (\(k, v) -> unwords [k, show v]) . Map.toAscList
 
+evalM :: Env -> String -> WlLangState Env
+evalM env input = parseString input >>= evalStmt env
 
-putMultipleLines :: [String] -> IO ()
-putMultipleLines [] = return ()
-putMultipleLines (l:ls) = do
-  putStrLn l
-  putMultipleLines ls
-
-printResult :: Env -> IO ()
-printResult env = putMultipleLines ((map (\(k, v) -> unwords [k, show v]) . Map.toAscList) env)
-
-
-eval :: Env -> String -> WlLangState Env
-eval env input = parseString input >>= evalStmt env 
-
-runWlLang :: WlLangState a -> IO (Either WlError a)
-runWlLang wlInt  = runExceptT wlInt
+eval :: Env -> String  -> IO (Either WlError Env)
+eval env input = runExceptT (evalM env input) 
 
 replEval :: Env -> String  -> IO Env
-replEval env input = do 
-  res <- runExceptT (eval env input)  
-  case res of 
-    Left err   -> (putStrLn $ show err) >> return env 
-    Right env' -> (printResult env') >> return env'
+replEval env input = do
+  res <- eval env input
+  case res of
+    Left err   -> (putStrLn $ show err) >> return env
+    Right env' -> (putStrLn $ showEnv env') >> return env'
 
-topLevelEval :: Env -> String -> IO ()
-topLevelEval env input = do 
-    res <- runWlLang (eval initEnv input) 
-    case res of 
-      Left err   -> putStrLn $ show err
-      Right env' -> printResult env'
+topLevelEval :: Env -> String -> IO String
+topLevelEval env input = do
+    res <- eval initEnv input
+    return $ case res of
+      Left err   -> show err
+      Right env' -> showEnv env'
 
-loadFile :: String -> IO ()
+loadFile :: String -> IO String
 loadFile path = readFile path >>= topLevelEval initEnv
 
-main :: IO ()
+main :: IO String
 main = getContents >>= topLevelEval initEnv

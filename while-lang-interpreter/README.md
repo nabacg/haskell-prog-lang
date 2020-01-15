@@ -70,8 +70,19 @@ min 10
 
 
 ### REPL session
+Example of using REPL to calculate Factorial of 15 in While Language: 
 ```
-$ stack exec while-lang-interpreter-exe
-WhileLang>>x := 15.
+$ stack exec while-lang-interpreter-exe                                    
+WhileLang>>x := 15
+x 15
+WhileLang>>y := 1
+x 15
+y 1
+WhileLang>>ENV
+x 15
+y 1
+WhileLang>> while (x > 1) do { y := y * x; x := x -1 }
+x 1
+y 1307674368000
 WhileLang>>
 ```
