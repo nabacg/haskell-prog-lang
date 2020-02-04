@@ -3,162 +3,19 @@ module WhileLangInterpreter (initEnv, eval, replEval, topLevelEval, loadFile, ma
 import System.IO
 import Control.Monad
 import Control.Monad.Except
-import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
-import Text.ParserCombinators.Parsec.Language
-import qualified Text.ParserCombinators.Parsec.Token as Token
 import Data.Maybe
 import Data.List(intercalate)
+import Text.ParserCombinators.Parsec(ParseError) -- needed for ParseError t
 import qualified Data.Map as Map
+import Ast
+import Parse(topLevelParse)
 
-data ArithOp = Plus | Minus | Multp | Div deriving (Show)
-
-data BoolOp = AND | OR deriving (Show)
-
-data RelOp = LessThen | GreaterThen deriving (Show)
-
-data NumExpr = Var String
-             | Num Integer
-             | ArithExpr ArithOp NumExpr NumExpr
-             deriving (Show)
-
-data BoolExpr = BoolLiteral Bool
-              | BoolOpExpr BoolOp BoolExpr BoolExpr
-              | RelOpExpr RelOp NumExpr NumExpr
-              deriving (Show)
-
-
-data Stmt = AssignStmt String NumExpr
-          | StmtSeq [Stmt]
-          | IfStmt BoolExpr Stmt Stmt
-          | WhileStmt BoolExpr Stmt
-          | EnvStmt
-          deriving (Show)
 
 type Env = Map.Map String Integer
 data WlError = WlParseError ParseError
               | UnboundVariableError String
               deriving (Show, Eq)
 type WlLangState = ExceptT WlError IO
-
-
--- https://wiki.haskell.org/Parsing_a_simple_imperative_language
-languageDef =
-  emptyDef { Token.commentStart = "/*"
-           , Token.commentEnd   = "*/"
-           , Token.commentLine  = "//"
-           , Token.identStart   = lower
-           , Token.identLetter  = lower
-           , Token.reservedNames = ["if"
-                                   , "then"
-                                   , "else"
-                                   , "while"
-                                   , "do"
-                                   , "true"
-                                   , "false"
-                                   , "and"
-                                   , "or"
-                                   , "ENV"]
-           , Token.reservedOpNames = ["+", "-", "*", "/", ":=",
-                                     "<", ">", "and", "or"]}
-
-
-lexer = Token.makeTokenParser languageDef
-
-
-identifier = Token.identifier lexer
-reserved   = Token.reserved lexer
-reservedOp = Token.reservedOp lexer
-parens     = Token.parens lexer -- ()
-braces     = Token.braces lexer -- {}
-integer    = Token.integer lexer
-semicolon  = Token.semi lexer
-whiteSpace = Token.whiteSpace lexer
-
-wlParser :: Parser Stmt
-wlParser = whiteSpace >> statement
-
-statement :: Parser Stmt
-statement = braces stmtSeq
-            <|> braces singleStatement
-            <|> stmtSeq
-
-stmtSeq :: Parser Stmt
-stmtSeq =  (\stmts -> case stmts of
-                        h:[] -> h
-                        sts   -> StmtSeq sts) <$>
-           (sepBy1 singleStatement semicolon )
-
-
-singleStatement :: Parser Stmt
-singleStatement = envStmt
-                  <|> ifStmt
-                  <|> whileStmt
-                  <|> assignStmt
-
-envStmt :: Parser Stmt
-envStmt = reserved "ENV" *> return EnvStmt
-
-ifStmt :: Parser Stmt
-ifStmt = do
-  reserved "if"
-  predExpr <- booleanExpr
-  reserved "then"
-  thenStmt <- statement
-  reserved "else"
-  elseStmt <- statement
-  return $ IfStmt predExpr thenStmt elseStmt
-
-
-whileStmt :: Parser Stmt
-whileStmt = do
-  reserved "while"
-  predExpr <- booleanExpr
-  reserved "do"
-  bodyStmt <- statement
-  return $ WhileStmt predExpr bodyStmt
-
-
-assignStmt :: Parser Stmt
-assignStmt = do
-  id <- identifier
-  reservedOp ":="
-  value <- numExpr
-  return $ AssignStmt id value
-
-booleanExpr :: Parser BoolExpr
-booleanExpr = buildExpressionParser booleanOperators booleanTerm
-
-numExpr :: Parser NumExpr
-numExpr = buildExpressionParser numOperators numTerm
-
-numOperators = [[Infix (reservedOp "*" >> return (ArithExpr Multp)) AssocLeft,
-                 Infix (reservedOp "/" >> return (ArithExpr Div)) AssocLeft]
-              , [Infix (reservedOp "+" >> return (ArithExpr Plus)) AssocLeft,
-                 Infix (reservedOp "-" >> return (ArithExpr Minus)) AssocLeft]]
-
-booleanOperators = [[Infix (reservedOp "and" >> return (BoolOpExpr AND)) AssocLeft]
-                  , [Infix (reservedOp "or"  >> return (BoolOpExpr OR)) AssocLeft]]
-
-numTerm = parens numExpr
-          <|> liftM Var identifier
-          <|> liftM Num integer
-
-booleanTerm = parens booleanExpr
-              <|> (reserved "true"  >> return (BoolLiteral True))
-              <|> (reserved "false" >> return (BoolLiteral False))
-              <|> relationExpr
-
-relationExpr = do
-  a1 <- numExpr
-  op <- relationOp
-  a2 <- numExpr
-  return $ RelOpExpr op a1 a2
-
-relationOp = (reservedOp ">" >> return GreaterThen)
-             <|> (reservedOp "<" >> return LessThen)
-
-
 
 initEnv :: Env
 initEnv = Map.empty
@@ -210,7 +67,7 @@ liftParse (Left err)   = throwError $ WlParseError err
 liftParse (Right stmt) = return stmt
 
 parseString :: String -> WlLangState Stmt
-parseString str = liftParse $ parse wlParser "" str
+parseString  = liftParse . topLevelParse
 
 showEnv :: Env -> String
 showEnv = intercalate "\n" . map (\(k, v) -> unwords [k, show v]) . Map.toAscList
